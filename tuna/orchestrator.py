@@ -389,13 +389,14 @@ def launch_hybrid(request: DeployRequest, *, separate_router_vm: bool = False) -
             )
 
     def _launch_spot():
+        spot_provider_name = request.spot_provider
         try:
-            provider = get_provider("skyserve")
+            provider = get_provider(spot_provider_name)
             preflight = provider.preflight(request)
             if not preflight.ok:
                 failures = "; ".join(c.message for c in preflight.failed)
                 return DeploymentResult(
-                    provider="skyserve",
+                    provider=spot_provider_name,
                     error=f"Preflight failed: {failures}",
                     metadata={"service_name": f"{request.service_name}-spot"},
                 )
@@ -405,7 +406,7 @@ def launch_hybrid(request: DeployRequest, *, separate_router_vm: bool = False) -
         except Exception as e:
             logger.error("Spot launch failed: %s", e)
             return DeploymentResult(
-                provider="skyserve",
+                provider=spot_provider_name,
                 error=str(e),
                 metadata=dict(_spot_meta),
             )
@@ -457,7 +458,7 @@ def launch_hybrid(request: DeployRequest, *, separate_router_vm: bool = False) -
             except Exception as e:
                 logger.error("Spot launch failed: %s", e)
                 spot_result = DeploymentResult(
-                    provider="skyserve",
+                    provider=request.spot_provider,
                     error=str(e),
                     metadata=dict(_spot_meta),
                 )
@@ -477,21 +478,26 @@ def launch_hybrid(request: DeployRequest, *, separate_router_vm: bool = False) -
             router_url=router_url,
         )
 
-    # Default path: colocate router on controller (2 workers, then SSH)
-    logger.info("Launching serverless + spot in parallel, router will colocate on controller")
+    # Default path: colocate router on SkyServe controller if using skyserve,
+    # otherwise fall back to a separate router VM.
+    _can_colocate = request.spot_provider == "skyserve"
+    if _can_colocate:
+        logger.info("Launching serverless + spot in parallel, router will colocate on controller")
+    else:
+        logger.info("Launching serverless + spot in parallel (spot via %s, separate router VM)", request.spot_provider)
     spot_result = None
     pool = ThreadPoolExecutor(max_workers=2)
     try:
         fut_serverless = pool.submit(_launch_serverless)
         fut_spot = pool.submit(_launch_spot)
 
-        # Wait for spot — sky serve up creates the controller
+        # Wait for spot
         try:
             spot_result = fut_spot.result(timeout=900)
         except Exception as e:
             logger.error("Spot launch failed: %s", e)
             spot_result = DeploymentResult(
-                provider="skyserve", error=str(e), metadata=dict(_spot_meta),
+                provider=request.spot_provider, error=str(e), metadata=dict(_spot_meta),
             )
 
         # Check if serverless is done yet
@@ -504,8 +510,8 @@ def launch_hybrid(request: DeployRequest, *, separate_router_vm: bool = False) -
             except Exception:
                 pass
 
-        # Find the controller cluster and launch router on it
-        controller_cluster = _find_controller_cluster()
+        # Find the controller cluster and launch router on it (only for skyserve)
+        controller_cluster = _find_controller_cluster() if _can_colocate else None
         if controller_cluster:
             logger.info("Controller found: %s — colocating router", controller_cluster)
             router_result = _launch_router_on_controller(
@@ -515,7 +521,8 @@ def launch_hybrid(request: DeployRequest, *, separate_router_vm: bool = False) -
                 router_api_key=_router_api_key,
             )
         else:
-            logger.warning("Controller cluster not found, falling back to separate router VM")
+            if _can_colocate:
+                logger.warning("Controller cluster not found, falling back to separate router VM")
             router_result = _launch_router_vm(request, _router_api_key)
 
         if router_result.error:
@@ -554,9 +561,10 @@ def launch_hybrid(request: DeployRequest, *, separate_router_vm: bool = False) -
                 router_api_key=_router_api_key,
             )
 
-        # Spot URL is localhost for colocated, but push for fallback (separate VM)
+        # Spot URL is localhost for colocated skyserve, but must be pushed
+        # for separate VMs and non-skyserve spot providers.
         if (router_url and spot_result and spot_result.endpoint_url
-                and router_result.metadata.get("colocated") != "true"):
+                and (not _can_colocate or router_result.metadata.get("colocated") != "true")):
             logger.info("Pushing spot URL to router: %s", spot_result.endpoint_url)
             push_url_to_router(router_url, spot_url=spot_result.endpoint_url, router_api_key=_router_api_key)
     finally:

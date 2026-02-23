@@ -53,6 +53,8 @@ def cmd_deploy(args: argparse.Namespace) -> None:
         else:
             serverless_provider = "modal"
 
+    spot_provider = args.spot_provider
+
     request = DeployRequest(
         model_name=args.model,
         gpu=args.gpu,
@@ -60,6 +62,7 @@ def cmd_deploy(args: argparse.Namespace) -> None:
         tp_size=args.tp_size,
         max_model_len=args.max_model_len,
         serverless_provider=serverless_provider,
+        spot_provider=spot_provider,
         spots_cloud=args.spots_cloud,
         region=args.region,
         cold_start_mode=args.cold_start_mode,
@@ -73,7 +76,7 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     try:
         ensure_provider_registered(serverless_provider)
         if not args.serverless_only:
-            ensure_provider_registered("skyserve")
+            ensure_provider_registered(spot_provider)
     except ImportError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -97,7 +100,9 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     if args.serverless_only:
         print(f"Mode: serverless-only")
     else:
-        print(f"Spot cloud: {request.spots_cloud}")
+        print(f"Spot provider: {request.spot_provider}")
+        if request.spot_provider == "skyserve":
+            print(f"Spot cloud: {request.spots_cloud}")
     print()
 
     from tuna.models import HybridDeployment
@@ -950,7 +955,10 @@ def main() -> None:
     p_deploy.add_argument("--max-model-len", type=int, default=4096)
     p_deploy.add_argument("--serverless-provider", default=None,
                           help="Serverless backend: modal, runpod, cloudrun, baseten, azure, cerebrium (default: cheapest for GPU)")
-    p_deploy.add_argument("--spots-cloud", default="aws", help="Cloud for spot GPUs")
+    p_deploy.add_argument("--spot-provider", default="skyserve",
+                          choices=["skyserve", "runpod-spot", "vastai-spot"],
+                          help="Spot backend: skyserve (SkyPilot), runpod-spot, vastai-spot (default: skyserve)")
+    p_deploy.add_argument("--spots-cloud", default="aws", help="Cloud for spot GPUs (skyserve only)")
     p_deploy.add_argument("--region", default=None)
     p_deploy.add_argument("--concurrency", type=int, default=None,
                           help="Override serverless concurrency limit")

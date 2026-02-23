@@ -785,7 +785,8 @@ class TestCmdDeployKeyboardInterrupt:
 
         args = argparse.Namespace(
             model="m", gpu="g", gpu_count=1, tp_size=1, max_model_len=4096,
-            serverless_provider="modal", spots_cloud="aws", region=None,
+            serverless_provider="modal", spot_provider="skyserve",
+            spots_cloud="aws", region=None,
             concurrency=None, workers_max=None, no_scale_to_zero=False,
             scaling_policy=None, service_name="test-svc", public=False,
             use_different_vm_for_lb=False, gcp_project=None, gcp_region=None,

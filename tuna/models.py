@@ -19,6 +19,7 @@ class DeployRequest:
     tp_size: int = 1
     max_model_len: int = 4096
     serverless_provider: str = "modal"  # "modal", "runpod", "cloudrun"
+    spot_provider: str = "skyserve"  # "skyserve", "runpod-spot", "vastai-spot"
     spots_cloud: str = "aws"
     region: Optional[str] = None
     cold_start_mode: str = "fast_boot"  # "fast_boot" or "no_fast_boot"

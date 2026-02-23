@@ -17,6 +17,8 @@ PROVIDER_MODULES: dict[str, tuple[str, str]] = {
     "azure": ("tuna.providers.azure_provider", "AzureProvider"),
     "cerebrium": ("tuna.providers.cerebrium_provider", "CerebriumProvider"),
     "skyserve": ("tuna.spot.sky_launcher", "SkyLauncher"),
+    "runpod-spot": ("tuna.spot.runpod_spot", "RunPodSpotProvider"),
+    "vastai-spot": ("tuna.spot.vastai_spot", "VastAISpotProvider"),
 }
 
 # pip extra needed for each provider (used in error messages).
