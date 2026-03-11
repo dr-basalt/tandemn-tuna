@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  tuna:
+    build: .
+    container_name: tandemn-tuna
+    ports:
+      - "8080:8080"
+    environment:
+      # AWS Credentials (for spot instances)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      
+      # GCP Credentials (if using GCP spot instances)
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCP_REGION=${GCP_REGION:-us-central1}
+      
+      # HuggingFace Token (for gated models)
+      - HF_TOKEN=${HF_TOKEN:-}
+      
+      # Serverless Provider API Keys
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY:-}
+      - BASETEN_API_KEY=${BASETEN_API_KEY:-}
+      - CEREBRIUM_API_KEY=${CEREBRIUM_API_KEY:-}
+      
+      # Azure Credentials
+      - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID:-}
+      - AZURE_RESOURCE_GROUP=${AZURE_RESOURCE_GROUP:-}
+      - AZURE_REGION=${AZURE_REGION:-eastus}
+      
+      # Tuna Service Configuration
+      - TUNA_MODEL=${TUNA_MODEL:-Qwen/Qwen3-0.6B}
+      - TUNA_GPU=${TUNA_GPU:-L4}
+      - TUNA_SERVICE_NAME=${TUNA_SERVICE_NAME:-tuna-service}
+      - TUNA_PROVIDER=${TUNA_PROVIDER:-modal}
+      - TUNA_SPOTS_CLOUD=${TUNA_SPOTS_CLOUD:-aws}
+      - TUNA_SERVERLESS_ONLY=${TUNA_SERVERLESS_ONLY:-false}
+    volumes:
+      # Mount AWS credentials
+      - ${HOME}/.aws:/home/tuna/.aws:ro
+      # Mount GCP credentials
+      - ${HOME}/.config/gcloud:/home/tuna/.config/gcloud:ro
+      # Mount Modal token
+      - ${HOME}/.modal:/home/tuna/.modal:ro
+      # Persistent data directory
+      - tuna_data:/home/tuna/.tuna
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/router/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Override the default command to deploy the service
+    command: >
+      sh -c "
+        if [ \"$$TUNA_SERVERLESS_ONLY\" = \"true\" ]; then
+          tuna deploy --model $$TUNA_MODEL --gpu $$TUNA_GPU --service-name $$TUNA_SERVICE_NAME --provider $$TUNA_PROVIDER --serverless-only --public
+        else
+          tuna deploy --model $$TUNA_MODEL --gpu $$TUNA_GPU --service-name $$TUNA_SERVICE_NAME --provider $$TUNA_PROVIDER --spots-cloud $$TUNA_SPOTS_CLOUD --public
+        fi &&
+        sleep infinity
+      "
+
+volumes:
+  tuna_data:
+    driver: local
+
+networks:
+  default:
+    name: tuna-network
