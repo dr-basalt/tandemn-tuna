@@ -38,12 +38,6 @@ services:
       - TUNA_SPOTS_CLOUD=${TUNA_SPOTS_CLOUD:-aws}
       - TUNA_SERVERLESS_ONLY=${TUNA_SERVERLESS_ONLY:-false}
     volumes:
-      # Mount AWS credentials
-      - ${HOME}/.aws:/home/tuna/.aws:ro
-      # Mount GCP credentials
-      - ${HOME}/.config/gcloud:/home/tuna/.config/gcloud:ro
-      # Mount Modal token
-      - ${HOME}/.modal:/home/tuna/.modal:ro
       # Persistent data directory
       - tuna_data:/home/tuna/.tuna
     restart: unless-stopped
